@@ -35,6 +35,10 @@ app.use('/api', (_req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
+// Verificação de saúde usada pela plataforma de deploy (sem autenticação, sem dados)
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
 app.use('/api', authRoutes);
 app.use('/api/checklist', checklistRoutes);
 app.use('/api/estoque', estoqueRoutes);
