@@ -1,0 +1,18 @@
+{
+  "name": "Instituto Patas do Bairro — Gestão e Cuidado Animal",
+  "short_name": "Patas do Bairro",
+  "description": "Checklist de medicações por turno e controle de estoque do abrigo comunitário.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEF2F5",
+  "theme_color": "#0B3954",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
