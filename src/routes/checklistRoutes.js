@@ -18,4 +18,10 @@ router.post('/:id/confirmar', (req, res) => {
   res.json(checklistService.confirmar(req.params.id, req.usuario));
 });
 
+// Rodada 2 — correção de registro pela coordenação (com justificativa)
+router.post('/:id/corrigir', (req, res) => {
+  const { justificativa } = req.body || {};
+  res.json(checklistService.corrigir(req.params.id, req.usuario, justificativa));
+});
+
 module.exports = router;
