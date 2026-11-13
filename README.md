@@ -40,11 +40,23 @@ Use outra porta com `PORT=8080 npm start`.
 
 Na tela de login há o atalho **"Preencher dados de demonstração"**.
 
+## Deploy (Render)
+
+A aplicação está publicada como **Web Service gratuito no [Render](https://render.com)**, configurado pelo arquivo [`render.yaml`](render.yaml) (Blueprint):
+
+- **Build:** `npm ci` · **Start:** `npm start` (Node 22, `NODE_ENV=production`)
+- **Health check:** `GET /api/health`
+- **Deploy contínuo:** cada push na `main` (após o CI do PR passar) gera um novo deploy automaticamente.
+
+Para publicar uma cópia: no Render, *New → Blueprint*, conecte este repositório e confirme.
+Observações do plano gratuito: o serviço "hiberna" após ~15 min sem acesso (o primeiro acesso seguinte leva cerca de 1 min) e, como os dados ficam em memória, cada reinício restaura os dados de demonstração.
+
 ## Estrutura
 
 ```
 .
 ├── .github/workflows/ci.yml     # Integração contínua
+├── render.yaml                  # Deploy (Render Blueprint)
 ├── public/                      # Front-end PWA (servido como estático)
 │   ├── index.html               # SPA: Login, Checklist, Estoque, Resumo
 │   ├── css/styles.css           # Tema claro de alto contraste
