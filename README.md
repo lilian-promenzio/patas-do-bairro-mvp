@@ -60,7 +60,9 @@ Na tela de login há o atalho **"Preencher dados de demonstração"**.
 │   ├── routes/                  # Rotas REST
 │   ├── services/                # Regras de negócio
 │   └── utils/                   # AppError, formatação de horário
-└── tests/api.test.js            # Testes de integração
+└── tests/
+    ├── api.test.js              # Testes de integração (HTTP + supertest)
+    └── unit.test.js             # Testes unitários dos serviços
 ```
 
 ## API
@@ -75,9 +77,26 @@ Erros sempre respondem `{ "codigo": "...", "mensagem": "..." }` — mensagem ami
 | `POST` | `/api/logout` | Encerra a sessão (`204`). |
 | `GET` | `/api/checklist?turno=manha\|tarde` | **RF02** — cartões do turno com baia, animal/grupo, espécie, medicamento/dosagem, via e status (`PENDENTE`/`APLICADO`), além do progresso. |
 | `POST` | `/api/checklist/:id/confirmar` | **RF03** — registra autor e horário (`"Aplicado às 08:42 por Lucas"`). Dose já aplicada → `409`. |
+| `POST` | `/api/checklist/:id/corrigir` | *Rodada 2* — `{ justificativa }`. Só coordenação (`403` para voluntário); volta o item para `PENDENTE` preservando o histórico. |
 | `GET` | `/api/estoque?categoria=todos\|racao\|medicamento` | **RF04** — insumos com `saldoAtual`, `estoqueMinimo` e `status` (`CRITICO` se `saldoAtual < estoqueMinimo`, senão `NORMAL`) + alerta global. |
-| `POST` | `/api/estoque/:id/movimentar` | **RF04** — `{ tipo: 'entrada'\|'saida', quantidade }`. Exige `quantidade > 0` (inteira para frascos) e bloqueia saída maior que o saldo → `400` com orientação. |
+| `POST` | `/api/estoque/:id/movimentar` | **RF04** — `{ tipo: 'entrada'\|'saida', quantidade, motivo? }` (`motivo` da saída: `consumo`, `perda`, `doacao`, `vencimento`). Exige `quantidade > 0` (inteira para frascos) e bloqueia saída maior que o saldo → `400` com orientação. |
 | `GET` | `/api/resumo` | Indicadores consolidados (fictícios + progresso do dia + alertas + últimos registros). |
+
+## Rodada 2 — melhorias a partir do feedback de validação
+
+Implementadas após a primeira sessão de testes com usuário (validação simulada, projeto acadêmico):
+
+| Feedback da rodada 1 | Melhoria |
+| --- | --- |
+| Um toque registra a dose e não há como desfazer | **Confirmação em duas etapas**: "Aplicar Colírio Oftálmico — 2 gotas em Luna (Baia 05)?" → *Sim, registrar* / *Cancelar* |
+| Registro feito por engano | **Correção pela coordenação** (`POST /api/checklist/:id/corrigir`) com justificativa obrigatória (≥ 10 caracteres). O registro original fica no histórico e na auditoria; voluntário recebe `403`. |
+| Checklist não "vira o dia" | **Reinício diário automático** no fuso do abrigo, com registro na auditoria |
+| Não se sabe para onde vai o estoque | **Motivo da saída** obrigatório na interface: consumo, perda/avaria, doação ou vencimento (`motivo` na API; padrão `consumo`) |
+| Teclado do celular usa vírgula | Campo de quantidade **aceita vírgula** (`2,5`), com dica visível |
+| Aviso de sucesso cobre os cartões | No checklist, o próprio cartão mostra o registro e o anúncio vai para leitores de tela; avisos de estoque ganharam botão **Fechar** |
+| Contador da aba pequeno / filtro esquecido | Contador maior e com texto para leitor de tela; **filtro e turno lembrados** no aparelho (turno só no mesmo dia) |
+
+Testes: **34** no total — 28 de integração (`tests/api.test.js`) e 6 unitários dos serviços com datas controladas (`tests/unit.test.js`).
 
 ## Requisitos não funcionais atendidos
 
@@ -93,7 +112,7 @@ Erros sempre respondem `{ "codigo": "...", "mensagem": "..." }` — mensagem ami
 ## Limitações conhecidas do MVP
 
 - Dados em memória: reiniciar o servidor restaura o estado inicial e encerra as sessões.
-- O checklist não "vira o dia" automaticamente; não há distinção de permissões entre perfis além da exibição.
+- As permissões por perfil cobrem apenas a correção de registros (exclusiva da coordenação).
 - Ícone do PWA apenas em SVG; alguns navegadores podem exigir PNG 192/512 px para instalação.
 
 Próximos passos sugeridos: persistência (SQLite/PostgreSQL), limite de tentativas de login, permissões por perfil (ex.: só coordenação ajusta estoque mínimo) e modo offline com fila de sincronização.
