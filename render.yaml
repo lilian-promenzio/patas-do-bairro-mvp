@@ -1,0 +1,19 @@
+# Blueprint do Render: https://render.com/docs/blueprint-spec
+# Publica o monólito Node.js (API + PWA) como Web Service gratuito,
+# com deploy automático a cada push na branch main.
+services:
+  - type: web
+    name: patas-do-bairro-mvp
+    runtime: node
+    plan: free
+    region: virginia
+    branch: main
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production

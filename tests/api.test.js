@@ -363,6 +363,11 @@ describe('Resumo consolidado', () => {
     assert.equal(res.body.ultimosRegistros[0].tipo, 'ESTOQUE');
   });
 
+  it('health check responde sem autenticação', async () => {
+    const res = await request(app).get('/api/health').expect(200);
+    assert.deepEqual(res.body, { status: 'ok' });
+  });
+
   it('rota de API inexistente retorna 404 em JSON', async () => {
     const res = await request(app).get('/api/nao-existe').expect(404);
     assert.equal(res.body.mensagem, 'Recurso não encontrado.');
