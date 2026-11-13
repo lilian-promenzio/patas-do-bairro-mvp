@@ -275,6 +275,78 @@ describe('RF04 — Controle de estoque e alertas críticos', () => {
   });
 });
 
+describe('Rodada 2 — melhorias a partir do feedback', () => {
+  it('coordenação corrige registro com justificativa e a dose pode ser registrada de novo', async () => {
+    const tokenLucas = await entrar();
+    const tokenCamila = await entrar(CAMILA);
+    await request(app).post('/api/checklist/m1/confirmar').set('Authorization', `Bearer ${tokenLucas}`).expect(200);
+
+    const res = await request(app)
+      .post('/api/checklist/m1/corrigir')
+      .set('Authorization', `Bearer ${tokenCamila}`)
+      .send({ justificativa: 'Toque por engano: dose ainda não administrada.' })
+      .expect(200);
+    assert.equal(res.body.item.status, 'PENDENTE');
+    assert.equal(res.body.item.aplicadoPor, null);
+    assert.match(res.body.item.ultimaCorrecao, /corrigido por Camila/);
+    assert.deepEqual(res.body.progresso, { total: 3, aplicados: 1 });
+
+    // O registro original fica preservado na auditoria
+    const resumo = await request(app).get('/api/resumo').set('Authorization', `Bearer ${tokenCamila}`).expect(200);
+    assert.equal(resumo.body.ultimosRegistros[0].tipo, 'CORRECAO');
+    assert.equal(resumo.body.ultimosRegistros[1].tipo, 'MEDICACAO');
+
+    await request(app).post('/api/checklist/m1/confirmar').set('Authorization', `Bearer ${tokenLucas}`).expect(200);
+  });
+
+  it('voluntário não pode corrigir registros (403)', async () => {
+    const token = await entrar();
+    const res = await request(app)
+      .post('/api/checklist/m2/corrigir')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ justificativa: 'Tentativa sem permissão de correção.' })
+      .expect(403);
+    assert.match(res.body.mensagem, /Apenas a coordenação/);
+  });
+
+  it('correção exige justificativa e só vale para item já aplicado', async () => {
+    const token = await entrar(CAMILA);
+    const auth = { Authorization: `Bearer ${token}` };
+    await request(app).post('/api/checklist/m2/corrigir').set(auth).send({ justificativa: 'curta' }).expect(400);
+    await request(app).post('/api/checklist/m2/corrigir').set(auth).send({}).expect(400);
+    await request(app)
+      .post('/api/checklist/m1/corrigir')
+      .set(auth)
+      .send({ justificativa: 'Item ainda pendente, nada a corrigir.' })
+      .expect(409);
+  });
+
+  it('saída registra o motivo informado e rejeita motivo inválido', async () => {
+    const token = await entrar();
+    const auth = { Authorization: `Bearer ${token}` };
+    const res = await request(app)
+      .post('/api/estoque/e2/movimentar')
+      .set(auth)
+      .send({ tipo: 'saida', quantidade: 5, motivo: 'doacao' })
+      .expect(200);
+    assert.equal(res.body.movimentacao.motivo, 'doacao');
+
+    const padrao = await request(app)
+      .post('/api/estoque/e2/movimentar')
+      .set(auth)
+      .send({ tipo: 'saida', quantidade: 1 })
+      .expect(200);
+    assert.equal(padrao.body.movimentacao.motivo, 'consumo');
+
+    const invalido = await request(app)
+      .post('/api/estoque/e2/movimentar')
+      .set(auth)
+      .send({ tipo: 'saida', quantidade: 1, motivo: 'furto' })
+      .expect(400);
+    assert.equal(invalido.body.codigo, 'MOTIVO_INVALIDO');
+  });
+});
+
 describe('Resumo consolidado', () => {
   it('reflete progresso das medicações, alertas e últimos registros', async () => {
     const token = await entrar();
