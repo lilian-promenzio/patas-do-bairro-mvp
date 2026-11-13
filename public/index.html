@@ -34,6 +34,7 @@
     <symbol id="i-sunset" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M2 19h20M6.5 15a5.5 5.5 0 0 1 11 0M12 3.5V7M4.2 8.2l1.8 1.8M19.8 8.2L18 10"/></symbol>
     <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-8.5-5.2-8.5-11.4A4.9 4.9 0 0 1 12 6.5a4.9 4.9 0 0 1 8.5 3.1C20.5 15.8 12 21 12 21z"/></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.6" fill="currentColor"/><path fill="currentColor" d="M2 20c0-3.8 3.1-6 7-6s7 2.2 7 6z"/><circle cx="17.2" cy="8.8" r="2.8" fill="currentColor"/><path fill="currentColor" d="M17.5 13.5c2.7.3 4.5 2.2 4.5 5.1V20h-4.4c0-2.6-.8-4.8-2.4-6.2.7-.2 1.5-.3 2.3-.3z"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" d="M12 11v6M12 7.2v.1"/></symbol>
   </svg>
 
@@ -127,7 +128,7 @@
         </div>
       </div>
 
-      <div id="lista-checklist" class="card-list" aria-live="polite"></div>
+      <div id="lista-checklist" class="card-list"></div>
     </section>
 
     <!-- TELA 3 — Controle de estoque e alertas -->
@@ -162,6 +163,7 @@
       <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-box"/></svg>
       <span>Estoque</span>
       <span class="nav-badge" id="nav-badge-estoque" hidden></span>
+      <span class="sr-only" id="nav-badge-estoque-sr"></span>
     </button>
     <button type="button" class="nav-btn" data-view="resumo">
       <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-chart"/></svg>
@@ -182,9 +184,20 @@
 
       <div class="field">
         <label for="mov-quantidade" id="mov-label">Quantidade</label>
-        <input id="mov-quantidade" type="number" inputmode="decimal" min="0" step="any"
-               aria-describedby="mov-feedback" autocomplete="off" required>
+        <input id="mov-quantidade" type="text" inputmode="decimal" enterkeyhint="done"
+               aria-describedby="mov-dica mov-feedback" autocomplete="off" required>
+        <p id="mov-dica" class="field-hint">Use vírgula para decimais. Ex.: 2,5</p>
         <p id="mov-feedback" class="field-feedback" aria-live="polite"></p>
+      </div>
+
+      <div class="field" id="campo-motivo" hidden>
+        <label for="mov-motivo">Motivo da saída</label>
+        <select id="mov-motivo">
+          <option value="consumo">Consumo (alimentação/tratamento)</option>
+          <option value="perda">Perda/avaria</option>
+          <option value="doacao">Doação a outro abrigo</option>
+          <option value="vencimento">Vencimento</option>
+        </select>
       </div>
 
       <div class="modal-actions">
@@ -193,6 +206,35 @@
       </div>
     </form>
   </dialog>
+
+  <!-- Rodada 2: correção de registro pela coordenação -->
+  <dialog id="modal-correcao" class="modal" aria-labelledby="corr-titulo" aria-describedby="corr-registro">
+    <form id="form-correcao" method="dialog" novalidate>
+      <div class="modal-header">
+        <h2 id="corr-titulo">Corrigir registro</h2>
+        <button type="button" class="btn btn-icon" id="btn-fechar-correcao" aria-label="Fechar">
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-close"/></svg>
+        </button>
+      </div>
+      <p class="modal-saldo" id="corr-registro"></p>
+      <div class="notice notice-info" role="note">
+        <svg class="icon" aria-hidden="true" focusable="false"><use href="#i-info"/></svg>
+        <p>A medicação voltará para <strong>PENDENTE</strong>. O registro original fica guardado no histórico.</p>
+      </div>
+      <div class="field">
+        <label for="corr-justificativa">Motivo da correção</label>
+        <textarea id="corr-justificativa" rows="3" maxlength="280" aria-describedby="corr-feedback" required></textarea>
+        <p id="corr-feedback" class="field-feedback" aria-live="polite"></p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="btn-cancelar-correcao">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btn-confirmar-correcao" disabled>Corrigir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Anúncios para leitores de tela (sem ocupar espaço na tela) -->
+  <div id="anuncio" class="sr-only" role="status" aria-live="polite"></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>

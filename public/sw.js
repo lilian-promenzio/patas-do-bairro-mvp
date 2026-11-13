@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = 'patas-v1';
+const VERSAO = 'patas-v2';
 const APP_SHELL = ['/', '/index.html', '/css/styles.css', '/js/app.js', '/manifest.json', '/icons/icon.svg'];
 
 self.addEventListener('install', (event) => {

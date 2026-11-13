@@ -3,6 +3,8 @@
 
 (() => {
   const CHAVE_SESSAO = 'patas.sessao';
+  const CHAVE_PREFS = 'patas.preferencias';
+  const CATEGORIAS = ['todos', 'racao', 'medicamento'];
   const DEMO = { email: 'lucas.ferreira@patasdobairro.org.br', senha: 'Patas2026#' };
   const VIEWS = ['login', 'checklist', 'estoque', 'resumo'];
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -11,10 +13,11 @@
     token: null,
     usuario: null,
     view: 'login',
-    turno: turnoAtual(),
-    categoria: 'todos',
+    turno: turnoSalvoDeHoje() || turnoAtual(),
+    categoria: CATEGORIAS.includes(lerPrefs().categoria) ? lerPrefs().categoria : 'todos',
     estoque: [],
     movimento: null, // { item, tipo }
+    correcao: null, // item em correção
     origemFoco: null,
   };
 
@@ -66,6 +69,33 @@
   const formatarNumero = (n) => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
   const formatarQtd = (n, item) => `${formatarNumero(n)} ${Number(n) === 1 ? item.unidadeSingular : item.unidade}`;
   const plural = (n, singular, pluralTxt) => (n === 1 ? singular : pluralTxt);
+
+  // ---- Rodada 2: lembrar o filtro e o turno escolhidos (só conveniência local)
+  function lerPrefs() {
+    try {
+      return JSON.parse(localStorage.getItem(CHAVE_PREFS) || '{}') || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function salvarPref(chave, valor) {
+    try {
+      localStorage.setItem(CHAVE_PREFS, JSON.stringify({ ...lerPrefs(), [chave]: valor }));
+    } catch {
+      /* armazenamento indisponível: segue sem lembrar */
+    }
+  }
+
+  function diaHoje() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  }
+
+  /** O turno escolhido só é lembrado no mesmo dia; num novo dia vale o horário atual. */
+  function turnoSalvoDeHoje() {
+    const t = lerPrefs().turno;
+    return t && t.dia === diaHoje() && ['manha', 'tarde'].includes(t.valor) ? t.valor : null;
+  }
 
   function turnoAtual() {
     const hora = Number(
@@ -132,13 +162,30 @@
   let temporizadorToast;
   function avisar(mensagem, tipo = 'ok') {
     const toast = $('#toast');
-    toast.replaceChildren(icone(tipo === 'erro' ? 'alert' : 'check'), h('p', { text: mensagem }));
+    toast.replaceChildren(
+      icone(tipo === 'erro' ? 'alert' : 'check'),
+      h('p', { text: mensagem }),
+      h(
+        'button',
+        { type: 'button', class: 'toast-fechar', 'aria-label': 'Fechar aviso', onclick: () => (toast.hidden = true) },
+        icone('close')
+      )
+    );
     toast.classList.toggle('is-error', tipo === 'erro');
     toast.hidden = false;
     clearTimeout(temporizadorToast);
     temporizadorToast = setTimeout(() => {
       toast.hidden = true;
-    }, 5000);
+    }, 4500);
+  }
+
+  /** Anuncia para leitores de tela sem cobrir nada na tela. */
+  function anunciar(mensagem) {
+    const regiao = $('#anuncio');
+    regiao.textContent = '';
+    setTimeout(() => {
+      regiao.textContent = mensagem;
+    }, 50);
   }
 
   function estadoCarregando(container, texto = 'Carregando…') {
@@ -194,6 +241,7 @@
   }
 
   function entrarNoApp() {
+    $('#toast').hidden = true; // não leva avisos da sessão anterior
     $('#usuario-nome').textContent = state.usuario.nome;
     $('#usuario-perfil').textContent = state.usuario.perfilRotulo;
     $('#data-atual').textContent = dataAtualTexto();
@@ -306,6 +354,7 @@
   // ------------------------------------------------------------------
   function selecionarTurno(turno) {
     state.turno = turno;
+    salvarPref('turno', { valor: turno, dia: diaHoje() });
     for (const btn of $$('.segmented-btn')) btn.setAttribute('aria-pressed', String(btn.dataset.turno === turno));
     carregarChecklist();
   }
@@ -347,25 +396,26 @@
   function cartaoMedicacao(item) {
     const aplicado = item.status === 'APLICADO';
     const tituloId = `med-titulo-${item.id}`;
+    const ehCoordenacao = state.usuario && state.usuario.perfil === 'coordenacao';
+    const acoes = h('div', { class: 'card-actions' });
 
-    const botao = aplicado
-      ? h(
+    if (aplicado) {
+      acoes.append(
+        h('button', { type: 'button', class: 'btn btn-block btn-done', disabled: true }, icone('check'), 'Aplicação registrada')
+      );
+      if (ehCoordenacao) {
+        const corrigir = h(
           'button',
-          { type: 'button', class: 'btn btn-block btn-done', disabled: true },
-          icone('check'),
-          'Aplicação registrada'
-        )
-      : h(
-          'button',
-          {
-            type: 'button',
-            class: 'btn btn-primary btn-block',
-            'aria-describedby': tituloId,
-          },
-          'Confirmar Aplicação'
+          { type: 'button', class: 'btn btn-secondary btn-block', 'aria-describedby': tituloId },
+          icone('undo'),
+          'Corrigir registro'
         );
-
-    if (!aplicado) botao.addEventListener('click', () => confirmarAplicacao(item, botao));
+        corrigir.addEventListener('click', () => abrirCorrecao(item, corrigir));
+        acoes.append(corrigir);
+      }
+    } else {
+      mostrarBotaoConfirmar(item, acoes, tituloId);
+    }
 
     return h(
       'article',
@@ -390,16 +440,52 @@
         h('div', null, h('dt', { text: 'Via de administração' }), h('dd', { text: item.via }))
       ),
       aplicado ? h('p', { class: 'registro' }, icone('check-circle'), item.registro) : null,
-      botao
+      item.ultimaCorrecao ? h('p', { class: 'correcao-nota' }, icone('undo', 'icon icon-sm'), item.ultimaCorrecao) : null,
+      acoes
     );
   }
 
-  async function confirmarAplicacao(item, botao) {
+  /** Etapa 1: botão largo "Confirmar Aplicação". */
+  function mostrarBotaoConfirmar(item, acoes, tituloId, focar = false) {
+    const botao = h(
+      'button',
+      { type: 'button', class: 'btn btn-primary btn-block', 'aria-describedby': tituloId },
+      'Confirmar Aplicação'
+    );
+    botao.addEventListener('click', () => pedirConfirmacao(item, acoes, tituloId));
+    acoes.replaceChildren(botao);
+    if (focar) botao.focus();
+  }
+
+  /** Etapa 2 (Rodada 2): confere animal e dose antes de registrar — evita toque por engano. */
+  function pedirConfirmacao(item, acoes, tituloId) {
+    const sim = h('button', { type: 'button', class: 'btn btn-primary' }, icone('check'), 'Sim, registrar');
+    const nao = h('button', { type: 'button', class: 'btn btn-secondary' }, 'Cancelar');
+    const perguntaId = `med-pergunta-${item.id}`;
+    sim.setAttribute('aria-describedby', perguntaId);
+
+    sim.addEventListener('click', () => confirmarAplicacao(item, sim, nao));
+    nao.addEventListener('click', () => mostrarBotaoConfirmar(item, acoes, tituloId, true));
+
+    acoes.replaceChildren(
+      h(
+        'div',
+        { class: 'confirm-box', role: 'group', 'aria-labelledby': perguntaId },
+        h('p', { id: perguntaId, text: `Aplicar ${item.medicamento} — ${item.dosagem} em ${item.animal} (${item.baia})?` }),
+        h('div', { class: 'confirm-actions' }, nao, sim)
+      )
+    );
+    sim.focus();
+  }
+
+  async function confirmarAplicacao(item, botao, cancelar) {
     botao.disabled = true; // impede duplo toque
+    cancelar.disabled = true;
     botao.textContent = 'Registrando…';
     try {
       const res = await api(`/api/checklist/${encodeURIComponent(item.id)}/confirmar`, { method: 'POST' });
-      avisar(`${item.animal}: ${res.item.registro}.`);
+      // Rodada 2: sem aviso flutuante — o próprio cartão mostra o registro
+      anunciar(`${item.animal}: ${res.item.registro}.`);
       await carregarChecklist({ focarItemId: item.id });
     } catch (erro) {
       if (erro.status === 401) return;
@@ -408,8 +494,61 @@
         await carregarChecklist({ focarItemId: item.id });
       } else {
         botao.disabled = false;
-        botao.textContent = 'Confirmar Aplicação';
+        cancelar.disabled = false;
+        botao.replaceChildren(icone('check'), 'Sim, registrar');
       }
+    }
+  }
+
+  // ----- Rodada 2: correção de registro pela coordenação -----
+  function abrirCorrecao(item, origem) {
+    state.correcao = item;
+    state.origemFoco = origem;
+    $('#corr-titulo').textContent = `Corrigir registro — ${item.animal}`;
+    $('#corr-registro').textContent = `${item.medicamento} — ${item.dosagem} · ${item.registro}`;
+    const campo = $('#corr-justificativa');
+    campo.value = '';
+    campo.removeAttribute('aria-invalid');
+    validarJustificativa();
+    $('#modal-correcao').showModal();
+    campo.focus();
+  }
+
+  function validarJustificativa() {
+    const campo = $('#corr-justificativa');
+    const n = campo.value.trim().length;
+    const fb = $('#corr-feedback');
+    const ok = n >= 10;
+    $('#btn-confirmar-correcao').disabled = !ok;
+    fb.className = `field-feedback${ok ? ' is-ok' : ''}`;
+    fb.replaceChildren(
+      icone(ok ? 'check' : 'info', 'icon icon-sm'),
+      h('span', { text: ok ? `${n}/280 caracteres` : `Descreva o motivo (faltam ${10 - n} caracteres).` })
+    );
+    return ok;
+  }
+
+  async function aoEnviarCorrecao(evento) {
+    evento.preventDefault();
+    if (!validarJustificativa()) return;
+    const item = state.correcao;
+    const botao = $('#btn-confirmar-correcao');
+    botao.disabled = true;
+    try {
+      const res = await api(`/api/checklist/${encodeURIComponent(item.id)}/corrigir`, {
+        method: 'POST',
+        body: { justificativa: $('#corr-justificativa').value },
+      });
+      state.origemFoco = null;
+      $('#modal-correcao').close();
+      anunciar(res.mensagem);
+      await carregarChecklist({ focarItemId: item.id });
+    } catch (erro) {
+      if (erro.status === 401) return;
+      const fb = $('#corr-feedback');
+      fb.className = 'field-feedback is-error';
+      fb.replaceChildren(icone('alert', 'icon icon-sm'), h('span', { text: erro.message }));
+      botao.disabled = false;
     }
   }
 
@@ -418,6 +557,7 @@
   // ------------------------------------------------------------------
   function selecionarCategoria(categoria) {
     state.categoria = categoria;
+    salvarPref('categoria', categoria);
     for (const p of $$('.pill')) p.setAttribute('aria-pressed', String(p.dataset.categoria === categoria));
     carregarEstoque();
   }
@@ -448,6 +588,9 @@
     const badgeNav = $('#nav-badge-estoque');
     badgeNav.hidden = totalCriticos === 0;
     badgeNav.textContent = String(totalCriticos);
+    $('#nav-badge-estoque-sr').textContent = totalCriticos
+      ? `, ${totalCriticos} ${plural(totalCriticos, 'item crítico', 'itens críticos')}`
+      : '';
 
     if (totalCriticos > 0) {
       banner.className = 'banner banner-alert';
@@ -536,11 +679,14 @@
 
     const campo = $('#mov-quantidade');
     campo.value = '';
-    campo.step = item.permiteFracao ? 'any' : '1';
     campo.inputMode = item.permiteFracao ? 'decimal' : 'numeric';
     campo.removeAttribute('aria-invalid');
-    if (tipo === 'saida') campo.max = String(item.saldoAtual);
-    else campo.removeAttribute('max');
+    $('#mov-dica').textContent = item.permiteFracao
+      ? 'Use vírgula para decimais. Ex.: 2,5'
+      : `Somente números inteiros de ${item.unidade}.`;
+
+    $('#campo-motivo').hidden = tipo !== 'saida';
+    $('#mov-motivo').value = 'consumo';
 
     const confirmar = $('#btn-confirmar-mov');
     confirmar.className = `btn ${tipo === 'entrada' ? 'btn-success' : 'btn-primary'}`;
@@ -572,17 +718,19 @@
     const { item, tipo } = state.movimento;
     const campo = $('#mov-quantidade');
     const bruto = campo.value.trim();
-    const n = Number(bruto);
+    // Rodada 2: aceita vírgula (padrão brasileiro) ou ponto como separador decimal
+    const formatoValido = /^\d+([.,]\d+)?$/.test(bruto);
+    const n = formatoValido ? Number(bruto.replace(',', '.')) : NaN;
     let erro = null;
 
-    if (campo.validity.badInput) erro = 'Digite apenas números.';
+    if (bruto !== '' && !formatoValido) erro = 'Digite apenas números. Use vírgula para decimais (ex.: 2,5).';
     else if (bruto === '') erro = mostrarVazio ? 'Informe a quantidade.' : null;
     else if (!Number.isFinite(n) || n <= 0) erro = 'A quantidade deve ser maior que zero.';
     else if (!item.permiteFracao && !Number.isInteger(n)) erro = `Use um número inteiro de ${item.unidade}.`;
     else if (tipo === 'saida' && n > item.saldoAtual)
       erro = `Saída maior que o saldo disponível (${formatarQtd(item.saldoAtual, item)}).`;
 
-    const valido = !erro && bruto !== '' && !campo.validity.badInput;
+    const valido = !erro && bruto !== '';
     $('#btn-confirmar-mov').disabled = !valido;
 
     if (erro) {
@@ -621,7 +769,7 @@
     try {
       const res = await api(`/api/estoque/${encodeURIComponent(item.id)}/movimentar`, {
         method: 'POST',
-        body: { tipo, quantidade },
+        body: tipo === 'saida' ? { tipo, quantidade, motivo: $('#mov-motivo').value } : { tipo, quantidade },
       });
       state.origemFoco = null;
       fecharModal();
@@ -776,12 +924,28 @@
       state.origemFoco = null;
     });
 
+    const modalCorr = $('#modal-correcao');
+    const fecharCorrecao = () => modalCorr.open && modalCorr.close();
+    $('#form-correcao').addEventListener('submit', aoEnviarCorrecao);
+    $('#corr-justificativa').addEventListener('input', validarJustificativa);
+    $('#btn-cancelar-correcao').addEventListener('click', fecharCorrecao);
+    $('#btn-fechar-correcao').addEventListener('click', fecharCorrecao);
+    modalCorr.addEventListener('click', (e) => {
+      if (e.target === modalCorr) fecharCorrecao();
+    });
+    modalCorr.addEventListener('close', () => {
+      if (state.origemFoco && document.contains(state.origemFoco)) state.origemFoco.focus();
+      state.origemFoco = null;
+      state.correcao = null;
+    });
+
     window.addEventListener('resize', atualizarAlturaCabecalho);
   }
 
   async function iniciar() {
     registrarEventos();
     for (const btn of $$('.segmented-btn')) btn.setAttribute('aria-pressed', String(btn.dataset.turno === state.turno));
+    for (const p of $$('.pill')) p.setAttribute('aria-pressed', String(p.dataset.categoria === state.categoria));
 
     const salva = lerSessao();
     if (salva && salva.token) {
