@@ -1,6 +1,9 @@
 # Instituto Patas do Bairro — Gestão e Cuidado Animal
 
 [![CI](https://github.com/lilian-promenzio/patas-do-bairro-mvp/actions/workflows/ci.yml/badge.svg)](https://github.com/lilian-promenzio/patas-do-bairro-mvp/actions/workflows/ci.yml)
+[![Uptime](https://github.com/lilian-promenzio/patas-do-bairro-mvp/actions/workflows/uptime.yml/badge.svg)](https://github.com/lilian-promenzio/patas-do-bairro-mvp/actions/workflows/uptime.yml)
+
+**Produção:** https://patas-do-bairro-mvp.onrender.com
 
 MVP de uma **Aplicação Web Progressiva (PWA) mobile-first** para apoiar a rotina de voluntários e coordenação de um abrigo animal comunitário: checklist de medicações por turno, registro auditável de aplicações e controle de estoque com alertas críticos.
 
@@ -51,12 +54,26 @@ A aplicação está publicada como **Web Service gratuito no [Render](https://re
 Para publicar uma cópia: no Render, *New → Blueprint*, conecte este repositório e confirme.
 Observações do plano gratuito: o serviço "hiberna" após ~15 min sem acesso (o primeiro acesso seguinte leva cerca de 1 min) e, como os dados ficam em memória, cada reinício restaura os dados de demonstração.
 
+## Monitoramento pós-lançamento
+
+O workflow [`uptime.yml`](.github/workflows/uptime.yml) roda **a cada 10 minutos** (e sob demanda) o script [`scripts/verificar-uptime.sh`](scripts/verificar-uptime.sh), que verifica em produção:
+
+1. `GET /api/health` → `200` com `{"status":"ok"}`;
+2. `GET /` → `200` com a PWA;
+3. `POST /api/login` com credencial inválida → `401` com erro em JSON (prova que a API e as regras de negócio respondem).
+
+Cada verificação tem até 5 tentativas (o plano gratuito pode levar ~1 min para "acordar"). O resumo de cada execução mostra uma tabela **UP/DOWN** com tempos de resposta. Em caso de **DOWN**, o job falha (o GitHub envia e-mail de falha) e uma issue `🔴 MVP fora do ar` com o rótulo `monitoramento` é aberta; quando o serviço volta, a issue é comentada e fechada automaticamente. O selo **Uptime** no topo deste README mostra o estado da última verificação.
+
+> Os agendamentos do GitHub Actions podem atrasar alguns minutos em horários de pico.
+
 ## Estrutura
 
 ```
 .
 ├── .github/workflows/ci.yml     # Integração contínua
+├── .github/workflows/uptime.yml # Monitoramento agendado (uptime)
 ├── render.yaml                  # Deploy (Render Blueprint)
+├── scripts/verificar-uptime.sh  # Verificação de disponibilidade em produção
 ├── public/                      # Front-end PWA (servido como estático)
 │   ├── index.html               # SPA: Login, Checklist, Estoque, Resumo
 │   ├── css/styles.css           # Tema claro de alto contraste

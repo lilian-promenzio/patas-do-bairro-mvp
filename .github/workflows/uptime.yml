@@ -1,0 +1,58 @@
+name: Monitoramento (uptime)
+
+# Verifica a cada 10 minutos se o MVP em produção está no ar e respondendo.
+# Se cair: o job falha (o GitHub envia e-mail de falha) e uma issue de incidente é aberta.
+# Quando volta: a issue é comentada e fechada automaticamente.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+env:
+  URL_APP: https://patas-do-bairro-mvp.onrender.com
+  ROTULO: monitoramento
+
+jobs:
+  verificar:
+    name: Verificar disponibilidade
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Verificar health check, PWA e API
+        run: ./scripts/verificar-uptime.sh
+
+      - name: Abrir incidente (status DOWN)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "$ROTULO" --color B60205 --description "Incidentes de disponibilidade" --force
+          aberta=$(gh issue list --label "$ROTULO" --state open --json number --jq '.[0].number')
+          detalhes="Execução: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ -z "$aberta" ]; then
+            gh issue create --label "$ROTULO" \
+              --title "🔴 MVP fora do ar (status DOWN)" \
+              --body "O monitoramento detectou falha em $URL_APP em $(TZ=America/Sao_Paulo date '+%d/%m/%Y %H:%M') (Brasília). $detalhes"
+          else
+            gh issue comment "$aberta" --body "Continua DOWN em $(TZ=America/Sao_Paulo date '+%d/%m/%Y %H:%M'). $detalhes"
+          fi
+
+      - name: Encerrar incidente (status UP)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --label "$ROTULO" --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "✅ Serviço voltou ao ar (UP) em $(TZ=America/Sao_Paulo date '+%d/%m/%Y %H:%M') (Brasília)."
+          done
