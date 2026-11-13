@@ -173,6 +173,7 @@ const db = {
   usuarios,
   indicadoresInstitucionais,
   checklist: [],
+  checklistData: null, // dia operacional (AAAA-MM-DD) a que o checklist se refere
   estoque: [],
   movimentacoes: [],
   auditoria: [],
@@ -180,7 +181,8 @@ const db = {
 };
 
 function resetStore() {
-  db.checklist = checklistInicial();
+  db.checklist = checklistInicial().map((item) => ({ ...item, correcoes: [] }));
+  db.checklistData = null; // definido no primeiro acesso (dados iniciais = dia corrente)
   db.estoque = estoqueInicial();
   db.movimentacoes = [];
   db.auditoria = [];

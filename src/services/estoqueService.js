@@ -7,6 +7,13 @@ const { horaLocal } = require('../utils/tempo');
 const CATEGORIAS = ['todos', 'racao', 'medicamento'];
 const ROTULOS_CATEGORIA = { racao: 'Ração', medicamento: 'Medicamento' };
 const TIPOS = { entrada: 'Entrada', saida: 'Saída' };
+// Rodada 2 — motivo da saída, para entender para onde vai o estoque
+const MOTIVOS_SAIDA = {
+  consumo: 'Consumo',
+  perda: 'Perda/avaria',
+  doacao: 'Doação a outro abrigo',
+  vencimento: 'Vencimento',
+};
 
 const arredondar = (n) => Math.round(n * 1000) / 1000;
 const formatarNumero = (n) => n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
@@ -45,9 +52,12 @@ function listar(categoria = 'todos') {
   return { categoria, itens, alerta: resumoAlertas() };
 }
 
-function validarMovimento(item, tipo, quantidade) {
+function validarMovimento(item, tipo, quantidade, motivo) {
   if (!Object.hasOwn(TIPOS, tipo)) {
     throw new AppError(400, 'Tipo de movimentação inválido. Escolha Entrada ou Saída.', 'TIPO_INVALIDO');
+  }
+  if (tipo === 'saida' && !Object.hasOwn(MOTIVOS_SAIDA, motivo)) {
+    throw new AppError(400, 'Motivo da saída inválido. Escolha Consumo, Perda/avaria, Doação ou Vencimento.', 'MOTIVO_INVALIDO');
   }
   if (typeof quantidade !== 'number' || !Number.isFinite(quantidade) || quantidade <= 0) {
     throw new AppError(400, 'Informe uma quantidade maior que zero.', 'QUANTIDADE_INVALIDA');
@@ -69,12 +79,14 @@ function validarMovimento(item, tipo, quantidade) {
   }
 }
 
-function movimentar(id, { tipo, quantidade } = {}, usuario, agora = new Date()) {
+function movimentar(id, { tipo, quantidade, motivo } = {}, usuario, agora = new Date()) {
   const item = db.estoque.find((i) => i.id === id);
   if (!item) {
     throw new AppError(404, 'Insumo não encontrado. Atualize a lista e tente novamente.', 'NAO_ENCONTRADO');
   }
-  validarMovimento(item, tipo, quantidade);
+  // Sem motivo informado, a saída é considerada consumo (compatível com a rodada 1).
+  const motivoSaida = tipo === 'saida' ? (motivo ?? 'consumo') : null;
+  validarMovimento(item, tipo, quantidade, motivoSaida);
 
   const saldoAnterior = item.saldoAtual;
   item.saldoAtual = arredondar(tipo === 'entrada' ? saldoAnterior + quantidade : saldoAnterior - quantidade);
@@ -83,6 +95,7 @@ function movimentar(id, { tipo, quantidade } = {}, usuario, agora = new Date()) 
     id: `mov${db.movimentacoes.length + 1}`,
     itemId: item.id,
     tipo,
+    motivo: motivoSaida,
     quantidade,
     saldoAnterior,
     saldoAtual: item.saldoAtual,
@@ -95,7 +108,7 @@ function movimentar(id, { tipo, quantidade } = {}, usuario, agora = new Date()) 
   db.auditoria.push({
     tipo: 'ESTOQUE',
     referencia: item.id,
-    descricao: `${TIPOS[tipo]} de ${formatarQuantidade(quantidade, item)} — ${item.nome}`,
+    descricao: `${TIPOS[tipo]}${motivoSaida ? ` (${MOTIVOS_SAIDA[motivoSaida]})` : ''} de ${formatarQuantidade(quantidade, item)} — ${item.nome}`,
     usuarioId: usuario.id,
     usuario: usuario.nomeCurto,
     horario: registro.horario,
@@ -116,4 +129,4 @@ function movimentar(id, { tipo, quantidade } = {}, usuario, agora = new Date()) 
   };
 }
 
-module.exports = { listar, movimentar, calcularStatus, resumoAlertas };
+module.exports = { listar, movimentar, calcularStatus, resumoAlertas, MOTIVOS_SAIDA };
